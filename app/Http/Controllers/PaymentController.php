@@ -155,9 +155,9 @@ class PaymentController extends Controller
         // and update the transaction record before showing the status to the user.
 
         if ($transaction->status === 'COMPLETED') {
-            return redirect()->route('resume-template')->with('success', 'Payment successful!');
+            return redirect()->route('payment.success');
         } else {
-             return redirect()->route('resume-build')->with('error', 'Payment failed or is still pending. Please check again later.');
+            return redirect()->route('payment.failure');
         }
     }
 }

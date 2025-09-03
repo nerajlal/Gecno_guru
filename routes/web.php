@@ -77,6 +77,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/resume/fullscreen-preview/{template}', [ResumeController::class, 'fullscreenPreview'])->name('resume.fullscreen.preview');
     Route::post('/payment/initiate', [PaymentController::class, 'initiatePayment'])->name('payment.initiate');
     Route::get('/payment/status/{merchantOrderId}', [PaymentController::class, 'paymentStatus'])->name('payment.status');
+    Route::get('/payment/success', function () {
+        return view('payment-success');
+    })->name('payment.success');
+    Route::get('/payment/failure', function () {
+        return view('payment-failure');
+    })->name('payment.failure');
 });
 
 Route::post('/payment/callback', [PaymentController::class, 'handleCallback'])->name('payment.callback');
