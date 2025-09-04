@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Models\Transaction;
 use PhonePe\payments\v2\standardCheckout\StandardCheckoutClient;
-use PhonePe\payments\v2\models\request\builders\StandardCheckoutPayRequestBuilder;
+use PhonePe\payments\v2\models\request\StandardCheckoutPayRequest;
+use PhonePe\payments\v2\standardCheckout\StandardCheckoutConstants;
 use PhonePe\common\exceptions\PhonePeException;
 
 class PaymentController extends Controller
@@ -42,12 +43,22 @@ class PaymentController extends Controller
 
         try {
             $message = 'Payment for resume plan.';
-            $payRequest = StandardCheckoutPayRequestBuilder::builder()
-                ->merchantOrderId($merchantOrderId)
-                ->amount($amountInPaisa)
-                ->message($message)
-                ->redirectUrl($redirectUrl)
-                ->build();
+
+            $paymentFlow = [
+                "type" => StandardCheckoutConstants::STANDARD_CHECKOUT_PAYMENT_FLOW_TYPE,
+                "message" => $message,
+                "merchantUrls" => [
+                    "redirectUrl" => $redirectUrl,
+                    "callbackUrl" => $callbackUrl
+                ]
+            ];
+
+            $payRequest = new StandardCheckoutPayRequest(
+                $merchantOrderId,
+                $amountInPaisa,
+                null,
+                $paymentFlow
+            );
 
             $payResponse = $client->pay($payRequest);
 
@@ -80,8 +91,10 @@ class PaymentController extends Controller
      */
     public function handleCallback(Request $request)
     {
-        $payload = $request->getContent();
+        $payload = $request->input('response');
+        Log::info('PhonePe Callback Raw Payload: ' . $payload);
         $decodedPayload = json_decode(base64_decode($payload), true);
+        Log::info('PhonePe Callback Decoded Payload: ', (array) $decodedPayload);
 
         if (!$decodedPayload) {
             Log::error('PhonePe Callback: Invalid payload received.');
@@ -108,14 +121,20 @@ class PaymentController extends Controller
         $transaction = Transaction::where('merchant_order_id', $merchantOrderId)->first();
 
         if ($transaction) {
-            if (isset($decodedPayload['success']) && $decodedPayload['success'] === true) {
-                $transaction->status = 'COMPLETED';
+            if (isset($decodedPayload['data']['transactionId'])) {
                 $transaction->phonepe_transaction_id = $decodedPayload['data']['transactionId'];
-            } else {
+            }
+
+            $state = $decodedPayload['data']['state'] ?? null;
+            if ($state === 'COMPLETED') {
+                $transaction->status = 'COMPLETED';
+            } else if ($state === 'FAILED') {
                 $transaction->status = 'FAILED';
             }
+            // For other states like PENDING, we can let the status remain as it is.
+
             $transaction->save();
-            Log::info('PhonePe Callback: Transaction status updated for ' . $merchantOrderId);
+            Log::info('PhonePe Callback: Transaction status updated to ' . $transaction->status . ' for ' . $merchantOrderId);
             return response()->json(['status' => 'success']);
         } else {
             Log::warning('PhonePe Callback: Transaction not found for merchantOrderId: ' . $merchantOrderId);
@@ -136,9 +155,9 @@ class PaymentController extends Controller
         // and update the transaction record before showing the status to the user.
 
         if ($transaction->status === 'COMPLETED') {
-            return redirect()->route('resume-template')->with('success', 'Payment successful!');
+            return redirect()->route('payment.success');
         } else {
-             return redirect()->route('resume-build')->with('error', 'Payment failed or is still pending. Please check again later.');
+            return redirect()->route('payment.failure');
         }
     }
 }

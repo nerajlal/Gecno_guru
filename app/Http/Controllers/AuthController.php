@@ -42,6 +42,16 @@ class AuthController extends Controller
     }
 
     /**
+     * Show the login form.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function showLoginForm()
+    {
+        return view('auth.login');
+    }
+
+    /**
      * Handle a login request.
      *
      * @param  \Illuminate\Http\Request  $request
